@@ -1,6 +1,11 @@
 from bs4 import BeautifulSoup
-import requests
+from pymongo import MongoClient
+from dotenv import load_dotenv
+from time import sleep
 
+import os
+
+import requests
 
 BASE_URL = 'https://www.hltv.org'
 PLAYER_STATS = 'https://www.hltv.org/stats/players'
@@ -65,7 +70,7 @@ def get_team(name, team_list):
     plink = BASE_URL
 
     for t in team_list:
-        print(list(t.items())[0][0])
+
         if list(t.items())[0][0] == name:
             plink += t[name]
             break
@@ -81,8 +86,42 @@ def get_team(name, team_list):
 
     return dict(zip(stat_keys, stat_values))
 
+def reformat(name_list, func):
+
+    f = []
+    c = 1
+    for n in name_list:
+        
+        print(f'Object {c} / {len(name_list)}')
+
+        nm = list(n.items())[0][0]
+        f.append(dict(list({'name': nm}.items()) + list(func(nm, name_list).items())))
+
+        sleep(2)
+        c += 1
+    return f
+
 
 def update_to_db():
-    pass
+    load_dotenv()
 
-print(get_team('TYLOO', get_team_list()))
+    client = MongoClient(os.environ['DB_CONNECT'])
+    db = client['Stats']
+
+    team_collection = db['Teams']
+    player_collection = db['Players']
+
+    team_stats = reformat(get_team_list(), get_team)
+    player_stats = reformat(get_player_list(), get_player)
+
+    for t in team_stats:
+        if team_collection.find_one({'name': t['name']}) == None:
+            team_collection.insert_one(t)
+        else:
+            team_collection.replace_one({'name': t['name']}, t)
+
+    for p in player_stats:
+        if team_collection.find_one({'name': p['name']}) == None:
+            player_collection.insert_one(p)
+        else:
+            player_collection.replace_one({'name': p['name']}, t)
